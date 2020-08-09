@@ -1,105 +1,40 @@
 # Transparent Squid in a container
 
 This is a trivial Dockerfile to build a proxy container.
-It will use the famous Squid proxy, configured to work in transparent mode.
+It will use the famous Squid proxy, configured to work in transparent mode using jpetazzo's Squid in a Can.
+Reconfigured to be quickly deployed for network usage rather than local caching.
 
 
 ## Why?
 
-If you build a lot of containers, and have a not-so-fast internet link,
-you might be spending a lot of time waiting for packages to download.
-It would be nice if all those downloads could be automatically cached,
-without tweaking your Dockerfiles, right?
-
-Or, maybe your corporate network forbids direct outside access, and require
-you to use a proxy. Then you can edit this recipe so that it cascades to the
-corporate proxy. Your containers will use the transparent proxy, which itself
-will pass along to the corporate proxy.
+When dealing with tablet based devices, or difficulties in network troubleshooting while using complex firewall appliances, such as nested firewalls,
+you may need to take advantage of caching updates, or temporarily bypassing user-based firewall restrictions and moving the device into the host vlan/IP-based authentication rule.
 
 
 ## How?
 
-You can use the squid proxy directly via docker and iptables rules, there is
-also a `docker-compose.yml` for convenience to use `docker-compose up` command to launch the system. For more
-information on tuning parameters see below.
 
 ### Using Docker and iptables directly.
 
 You can manually run these commands
 
 ```bash
-docker run --net host -d jpetazzo/squid-in-a-can
-iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to 3129 -w
-```
-
-After you stop you will need to cleanup the iptables rules:
-```bash
-iptables -t nat -D PREROUTING -p tcp --dport 80 -j REDIRECT --to 3129 -w
+docker run -p 3129:3129 -d jpetazzo/squid-in-a-can
 ```
 
 
 ### Using Compose
 
-There is a `docker-compose.yml` file to enable launching via [docker compose](https://docs.docker.com/compose/) and a separate container
-which will setup the iptables rules for you. To use this you will need a
-local checkout of this repo and have `docker` and `compose` installed.
 
-> Run the following command in the same directory as the `docker-compose.yml` file:
-
-```bash
-docker-compose up
-```
 
 ### Result
 
-That's it. Now all HTTP requests going through your Docker host will be
-transparently routed through the proxy running in the container.
 
-If you your tproxy instance goes down hard without cleaning up use the following command:
-```
-iptables -t nat -D PREROUTING -p tcp --dport 80 -j REDIRECT --to 3129 -w
-```
-
-
-Note: it will only affect HTTP traffic on port 80.
-
-Note: traffic originating from the host will not be affected, because
-the `PREROUTING` chain is not traversed by packets originating from the
-host.
-
-Note: if your Docker host is also a router for other things (e.g. if it
-runs various virtual machines, or is a VPN server, etc), those things
-will also see their HTTP traffic routed through the proxy. They have to
-use internal IP addresses, though.
-
-Note: if you plan to run this on EC2 (or any kind of infrastructure
-where the machine has an internal IP address), you should probably
-tweak the ACLs, or make sure that outside machines cannot access ports
-3128 and 3129 on your host.
-
-Note: It will be available to as a proxy on port 3128 on your local machine
-if you would like to setup local proxies yourself.
 
 
 ## What?
 
 The `jpetazzo/squid-in-a-can` container runs a really basic Squid3 proxy.
-Rather than writing my own configuration file, I patch the default Debian
-configuration. The main thing is to enable `intercept` on another port
-(here, 3129). To update the iptables for the intercept the command needs
-the --privileged flag.
-
-Then, this container should be started using *the network namespace of the
-host* (that's what the `--net host` option is for).
-Another strategy would be to start the container with its own namespace.
-Then, the HTTP traffic can be directed to it with a `DNAT` rule.
-The problem with this approach, is that Squid will "see" the traffic as
-being directed to its own IP address, instead of the destination HTTP
-server IP address; and since Squid 3.3, it refuses to honor such requests.
-
-(The reasoning is, that it would then have to trust the HTTP `Host:`
-header to know where to send the request. You can check [CVE-2009-0801]
-for details.)
 
 
 ## Tuning
@@ -165,9 +100,6 @@ a volume.
 
 ## Notes
 
-Ideas for improvement:
-
-- easy chaining to an upstream proxy
 
 ### HTTPS support
 
